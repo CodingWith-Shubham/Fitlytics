@@ -1,25 +1,182 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { Navbar } from "@/components/navbar";
+import { HeroSection } from "@/components/hero-section";
+import { ConnectSection } from "@/components/connect-section";
+import { SessionSummary } from "@/components/session-summary";
 
 export default function Home() {
   const [activity, setActivity] = useState<string>("—");
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [sensorData, setSensorData] = useState<any>(null);
   const [autoPredictEnabled, setAutoPredictEnabled] = useState(true);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [activities, setActivities] = useState<Array<{
+    id: number;
+    type: "Idle" | "Walking" | "Running";
+    timestamp: string;
+    elapsed: number;
+  }>>([]);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [showSummary, setShowSummary] = useState(false);
+  const [activityDurations, setActivityDurations] = useState({
+    Idle: 0,
+    Walking: 0,
+    Running: 0,
+  });
+  
   const wsRef = useRef<WebSocket | null>(null);
+  const lastActivityRef = useRef<string>("");
+  const activityStartTimeRef = useRef<number>(0);
   
   // Sliding window buffer for 2-second analysis
   const sensorBuffer = useRef<Array<{ timestamp: number; data: any }>>([]);
   const WINDOW_SIZE_MS = 2000; // 2 seconds
 
+  // Session elapsed timer
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (sessionActive) {
+      interval = setInterval(() => {
+        setSessionElapsed((e) => e + 1);
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [sessionActive]);
+
+  // ESP32 WebSocket Connection - Managed by handleConnect function
+  // No auto-connection on mount
+
+  // Auto-predict every 5 seconds
+  useEffect(() => {
+    if (!autoPredictEnabled || !connected || !sensorData || !sessionActive) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      predict();
+    }, 5000);
+
+    // Initial prediction
+    predict();
+
+    return () => clearInterval(interval);
+  }, [autoPredictEnabled, connected, sensorData, sessionActive]);
+
+  function classifyActivity(): string {
+    // Need sufficient samples in the window (minimum 10 samples for reliable classification)
+    if (sensorBuffer.current.length < 10) {
+      return "Collecting data...";
+    }
+    
+    // Calculate gyroscope magnitude for all samples in the 2-second window
+    const gyroMagnitudes = sensorBuffer.current.map(sample => {
+      const { gx, gy, gz } = sample.data;
+      return Math.sqrt(gx * gx + gy * gy + gz * gz);
+    });
+    
+    // Calculate statistics over the window
+    const avgGyroMag = gyroMagnitudes.reduce((a, b) => a + b, 0) / gyroMagnitudes.length;
+    const maxGyroMag = Math.max(...gyroMagnitudes);
+    const minGyroMag = Math.min(...gyroMagnitudes);
+    
+    // Rule-based classification using windowed gyro_mag (HIGHEST DIFFERENTIATING FACTOR)
+    // Thresholds based on statistical analysis of recorded sensor data
+    // Idle: ~2500, Walking: ~8332, Running: ~25196
+    const IDLE_THRESHOLD = 5500;      // Idle avg: 2500, Walking avg: 8332
+    const WALKING_THRESHOLD = 16000;  // Walking avg: 8332, Running avg: 25196
+    
+    // console.log(`Window [${sensorBuffer.current.length} samples]: AvgGyro=${avgGyroMag.toFixed(2)}, Max=${maxGyroMag.toFixed(2)}, Min=${minGyroMag.toFixed(2)}`);
+    
+    // Use average for stable classification
+    if (avgGyroMag < IDLE_THRESHOLD) {
+      return "Idle";
+    } else if (avgGyroMag < WALKING_THRESHOLD) {
+      return "Walking";
+    } else {
+      return "Running";
+    }
+  }
+
+  async function predict() {
+    if (!sensorData || loading) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Use rule-based classification with 2-second sliding window
+      const detectedActivity = classifyActivity();
+      
+      if (detectedActivity !== "Collecting data...") {
+        // Track activity duration changes
+        const now = Date.now();
+        
+        // If this is the first activity or activity changed
+        if (!lastActivityRef.current) {
+          // First activity detection - start tracking
+          lastActivityRef.current = detectedActivity;
+          activityStartTimeRef.current = now;
+        } else if (lastActivityRef.current !== detectedActivity && activityStartTimeRef.current > 0) {
+          // Activity changed - record duration of previous activity
+          const duration = (now - activityStartTimeRef.current) / 1000; // in seconds
+          const activityType = lastActivityRef.current as "Idle" | "Walking" | "Running";
+          setActivityDurations(prev => ({
+            ...prev,
+            [activityType]: prev[activityType] + duration
+          }));
+          
+          // Start tracking new activity
+          lastActivityRef.current = detectedActivity;
+          activityStartTimeRef.current = now;
+        }
+        
+        setActivity(detectedActivity);
+        
+        // Add to activities timeline
+        const newActivity = {
+          id: Date.now(),
+          type: detectedActivity as "Idle" | "Walking" | "Running",
+          timestamp: new Date().toLocaleTimeString("en-US", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          elapsed: sessionElapsed
+        };
+        
+        setActivities((prev) => [newActivity, ...prev].slice(0, 10));
+        // console.log(`Classified as: ${detectedActivity}`);
+      }
+    } catch (error) {
+      console.error("Classification error:", error);
+      setActivity("Error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleConnect = () => {
+    setConnecting(true);
+    setConnectionError(null);
+    
     // Connect to ESP32 WebSocket
     const ws = new WebSocket("ws://192.168.31.95:81");
     
     ws.onopen = () => {
       console.log("✅ Connected to ESP32");
       setConnected(true);
+      setConnecting(false);
+      setConnectionError(null);
     };
 
     ws.onmessage = (event) => {
@@ -46,7 +203,7 @@ export default function Home() {
             sample => now - sample.timestamp <= WINDOW_SIZE_MS
           );
           
-          console.log(`Buffer size: ${sensorBuffer.current.length} samples`);
+          // console.log(`Buffer size: ${sensorBuffer.current.length} samples`);
           setSensorData(data);
         }
       } catch (e) {
@@ -56,143 +213,111 @@ export default function Home() {
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
+      setConnectionError("Failed to connect to ESP32. Please check if the device is powered on and accessible.");
+      setConnecting(false);
       setConnected(false);
     };
 
     ws.onclose = () => {
       console.log("❌ Disconnected from ESP32");
+      if (connected) {
+        setConnectionError("Connection lost to ESP32");
+      }
       setConnected(false);
+      setSessionActive(false);
     };
 
     wsRef.current = ws;
+    
+    // Timeout for connection attempt
+    setTimeout(() => {
+      if (connecting && !connected) {
+        ws.close();
+        setConnecting(false);
+        setConnectionError("Connection timeout. Please check ESP32 IP address and network.");
+      }
+    }, 10000); // 10 second timeout
+  };
 
-    return () => {
-      ws.close();
-    };
-  }, []);
+  const handleStartSession = () => {
+    setSessionActive(true);
+    setSessionElapsed(0);
+    setActivities([]);
+    setActivity("—");
+    setShowSummary(false);
+    setActivityDurations({ Idle: 0, Walking: 0, Running: 0 });
+    lastActivityRef.current = "";
+    activityStartTimeRef.current = 0;
+  };
 
-  // Auto-predict every 5 seconds
-  useEffect(() => {
-    if (!autoPredictEnabled || !connected || !sensorData) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      predict();
-    }, 5000);
-
-    // Initial prediction
-    predict();
-
-    return () => clearInterval(interval);
-  }, [autoPredictEnabled, connected, sensorData]);
-
-  function classifyActivity(): string {
-    // Need sufficient samples in the window (minimum 10 samples for reliable classification)
-    if (sensorBuffer.current.length < 10) {
-      return "Collecting data...";
+  const handleStopSession = () => {
+    // Calculate final activity duration
+    if (lastActivityRef.current && activityStartTimeRef.current > 0) {
+      const now = Date.now();
+      const duration = (now - activityStartTimeRef.current) / 1000;
+      const activityType = lastActivityRef.current as "Idle" | "Walking" | "Running";
+      setActivityDurations(prev => ({
+        ...prev,
+        [activityType]: prev[activityType] + duration
+      }));
     }
     
-    // Calculate gyroscope magnitude for all samples in the 2-second window
-    const gyroMagnitudes = sensorBuffer.current.map(sample => {
-      const { gx, gy, gz } = sample.data;
-      return Math.sqrt(gx * gx + gy * gy + gz * gz);
-    });
-    
-    // Calculate statistics over the window
-    const avgGyroMag = gyroMagnitudes.reduce((a, b) => a + b, 0) / gyroMagnitudes.length;
-    const maxGyroMag = Math.max(...gyroMagnitudes);
-    const minGyroMag = Math.min(...gyroMagnitudes);
-    
-    // Rule-based classification using windowed gyro_mag (HIGHEST DIFFERENTIATING FACTOR)
-    // Thresholds based on statistical analysis of recorded sensor data
-    // Idle: ~2500, Walking: ~8332, Running: ~25196
-    const IDLE_THRESHOLD = 5500;      // Idle avg: 2500, Walking avg: 8332
-    const WALKING_THRESHOLD = 16000;  // Walking avg: 8332, Running avg: 25196
-    
-    console.log(`Window [${sensorBuffer.current.length} samples]: AvgGyro=${avgGyroMag.toFixed(2)}, Max=${maxGyroMag.toFixed(2)}, Min=${minGyroMag.toFixed(2)}`);
-    
-    // Use average for stable classification
-    if (avgGyroMag < IDLE_THRESHOLD) {
-      return "Idle";
-    } else if (avgGyroMag < WALKING_THRESHOLD) {
-      return "Walking";
-    } else {
-      return "Running";
-    }
-  }
+    setSessionActive(false);
+    setShowSummary(true);
+  };
 
-  async function predict() {
-    if (!sensorData || loading) {
-      return;
-    }
+  const handleCloseSummary = () => {
+    setShowSummary(false);
+  };
 
-    setLoading(true);
+  const handlePredictCalories = () => {
+    // Placeholder for future calorie prediction functionality
+    console.log("Predict calories clicked");
+  };
 
-    try {
-      // Use rule-based classification with 2-second sliding window
-      const detectedActivity = classifyActivity();
-      setActivity(detectedActivity);
-      console.log(`Classified as: ${detectedActivity}`);
-    } catch (error) {
-      console.error("Classification error:", error);
-      setActivity("Error");
-    } finally {
-      setLoading(false);
+  const handleDisconnect = () => {
+    setSessionActive(false);
+    if (wsRef.current) {
+      wsRef.current.close();
     }
-  }
+    setConnected(false);
+    setConnectionError(null);
+    sensorBuffer.current = [];
+    setSensorData(null);
+  };
 
   return (
-    <main style={{ padding: 40, fontFamily: "sans-serif" }}>
-      <h1>Fitlytics – Activity Prediction</h1>
-
-      <div style={{ marginBottom: 20 }}>
-        <p>
-          ESP32 Status:{" "}
-          <span style={{ color: connected ? "green" : "red", fontWeight: "bold" }}>
-            {connected ? "🟢 Connected" : "🔴 Disconnected"}
-          </span>
-        </p>
-        
-        <div style={{ marginTop: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={autoPredictEnabled}
-              onChange={(e) => setAutoPredictEnabled(e.target.checked)}
+    <main className="min-h-screen">
+      <div className="gradient-bg fixed inset-0 -z-10" />
+      <Navbar connected={connected} />
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <HeroSection />
+        <ConnectSection 
+          connected={connected}
+          connecting={connecting}
+          connectionError={connectionError}
+          sessionActive={sessionActive}
+          sessionElapsed={sessionElapsed}
+          currentActivity={activity}
+          activities={activities}
+          onConnect={handleConnect}
+          onStartSession={handleStartSession}
+          onStopSession={handleStopSession}
+          onDisconnect={handleDisconnect}
+        />
+        {showSummary && (
+          <div className="pb-16 sm:pb-24">
+            <SessionSummary
+              idleMinutes={activityDurations.Idle}
+              walkingMinutes={activityDurations.Walking}
+              runningMinutes={activityDurations.Running}
+              totalDuration={sessionElapsed}
+              onClose={handleCloseSummary}
+              onPredictCalories={handlePredictCalories}
             />
-            <span>Auto-predict every 5 seconds</span>
-          </label>
-        </div>
-
-        {sensorData && (
-          <details style={{ marginTop: 10 }}>
-            <summary style={{ cursor: "pointer" }}>Latest Sensor Data</summary>
-            <pre style={{ background: "#f4f4f4", padding: 10, borderRadius: 5 }}>
-              {JSON.stringify(sensorData, null, 2)}
-            </pre>
-          </details>
+          </div>
         )}
       </div>
-
-      <button 
-        onClick={predict} 
-        disabled={loading || !connected || !sensorData}
-        style={{
-          padding: "10px 20px",
-          fontSize: 16,
-          cursor: loading || !connected || !sensorData ? "not-allowed" : "pointer",
-          opacity: loading || !connected || !sensorData ? 0.5 : 1
-        }}
-      >
-        {loading ? "Predicting..." : "Predict Now (Manual)"}
-      </button>
-
-      <h2 style={{ marginTop: 20 }}>
-        Current Activity: <span style={{ fontWeight: "bold", color: "#0070f3", fontSize: 28 }}>{activity}</span>
-      </h2>
-      
-      {loading && <p style={{ color: "#666", fontSize: 14 }}>⏳ Analyzing...</p>}
     </main>
   );
 }
