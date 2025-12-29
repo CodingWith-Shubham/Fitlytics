@@ -4,6 +4,9 @@ import { Navbar } from "@/components/navbar";
 import { HeroSection } from "@/components/hero-section";
 import { ConnectSection } from "@/components/connect-section";
 import { SessionSummary } from "@/components/session-summary";
+import { WeightInputModal } from "@/components/weight-input-modal";
+import { SleepAnalysisSection } from "@/components/sleep-analysis-section";
+import { BeastModeSection } from "@/components/beast-mode-section";
 
 export default function Home() {
   const [activity, setActivity] = useState<string>("—");
@@ -27,6 +30,8 @@ export default function Home() {
     Walking: 0,
     Running: 0,
   });
+  const [calculatedCalories, setCalculatedCalories] = useState<number | null>(null);
+  const [showWeightModal, setShowWeightModal] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const lastActivityRef = useRef<string>("");
@@ -268,11 +273,30 @@ export default function Home() {
 
   const handleCloseSummary = () => {
     setShowSummary(false);
+    setCalculatedCalories(null);
   };
 
   const handlePredictCalories = () => {
-    // Placeholder for future calorie prediction functionality
-    console.log("Predict calories clicked");
+    setShowWeightModal(true);
+  };
+
+  const handleWeightSubmit = (weight: number) => {
+    // MET values for each activity
+    const MET_VALUES = {
+      Idle: 1.2,
+      Walking: 3.3,
+      Running: 8.0,
+    };
+    
+    // Calculate calories for each activity
+    // Formula: Calories = METs × Weight (kg) × Time (hours)
+    const idleCalories = MET_VALUES.Idle * weight * (activityDurations.Idle / 3600);
+    const walkingCalories = MET_VALUES.Walking * weight * (activityDurations.Walking / 3600);
+    const runningCalories = MET_VALUES.Running * weight * (activityDurations.Running / 3600);
+    
+    const totalCalories = idleCalories + walkingCalories + runningCalories;
+    
+    setCalculatedCalories(totalCalories);
   };
 
   const handleDisconnect = () => {
@@ -305,6 +329,9 @@ export default function Home() {
           onStopSession={handleStopSession}
           onDisconnect={handleDisconnect}
         />
+        
+      
+        
         {showSummary && (
           <div className="pb-16 sm:pb-24">
             <SessionSummary
@@ -312,11 +339,27 @@ export default function Home() {
               walkingMinutes={activityDurations.Walking}
               runningMinutes={activityDurations.Running}
               totalDuration={sessionElapsed}
+              calculatedCalories={calculatedCalories}
               onClose={handleCloseSummary}
               onPredictCalories={handlePredictCalories}
             />
           </div>
         )}
+      </div>
+      
+      <WeightInputModal 
+        isOpen={showWeightModal}
+        onClose={() => setShowWeightModal(false)}
+        onSubmit={handleWeightSubmit}
+      />
+      
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <SleepAnalysisSection 
+          connected={connected}
+          currentActivity={activity}
+        />
+        
+        <BeastModeSection />
       </div>
     </main>
   );

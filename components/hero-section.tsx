@@ -13,7 +13,7 @@ export function HeroSection() {
           aria-hidden="true"
         >
           <source
-            src="https://res.cloudinary.com/ddjxsqetl/video/upload/v1766903825/Fitness_Inspired_Background_Video_maz5cp.mp4"
+            src="https://res.cloudinary.com/ddjxsqetl/video/upload/v1766989958/Fitness_Inspired_Minimalist_Background_Video_diiexy.mp4"
             type="video/mp4"
           />
         </video>

@@ -8,6 +8,7 @@ interface SessionSummaryProps {
   walkingMinutes: number
   runningMinutes: number
   totalDuration: number
+  calculatedCalories: number | null
   onClose: () => void
   onPredictCalories: () => void
 }
@@ -17,6 +18,7 @@ export function SessionSummary({
   walkingMinutes,
   runningMinutes,
   totalDuration,
+  calculatedCalories,
   onClose,
   onPredictCalories,
 }: SessionSummaryProps) {
@@ -89,6 +91,22 @@ export function SessionSummary({
           </div>
         </div>
 
+        {calculatedCalories !== null && (
+          <div className="glass-card p-6 sm:p-8 rounded-2xl border-2 border-yellow-500/50 bg-yellow-500/10">
+            <div className="text-center">
+              <div className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wider mb-2">
+                Total Calories Burned
+              </div>
+              <div className="text-4xl sm:text-5xl md:text-6xl font-bold text-yellow-500">
+                {calculatedCalories.toFixed(1)}
+              </div>
+              <div className="text-sm sm:text-base text-muted-foreground mt-1">
+                kcal
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center pt-4">
           <Button
             size="lg"
@@ -96,7 +114,7 @@ export function SessionSummary({
             className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 rounded-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold transition-all duration-300 hover:scale-105"
           >
             <Zap className="h-5 w-5 mr-2" />
-            Predict Calories
+            {calculatedCalories !== null ? "Recalculate Calories" : "Predict Calories"}
           </Button>
           <Button
             size="lg"

@@ -48,8 +48,8 @@ export function Navbar({ connected }: NavbarProps) {
             <a href="#dashboard" className="text-sm font-medium transition-colors hover:text-primary">
               Dashboard
             </a>
-            <a href="#analytics" className="text-sm font-medium transition-colors hover:text-primary">
-              Analytics
+            <a href="#sleep-analysis" className="text-sm font-medium transition-colors hover:text-primary">
+              Sleep Analysis
             </a>
             <a href="#beast-mode" className="text-sm font-medium transition-colors hover:text-primary">
               Beast Mode
@@ -111,11 +111,11 @@ export function Navbar({ connected }: NavbarProps) {
               Dashboard
             </a>
             <a
-              href="#analytics"
+              href="#sleep-analysis"
               onClick={closeMobileMenu}
               className="block px-4 py-2 text-base font-medium transition-colors hover:text-primary hover:bg-secondary/30 rounded-lg"
             >
-              Analytics
+              Sleep Analysis
             </a>
             <a
               href="#beast-mode"
