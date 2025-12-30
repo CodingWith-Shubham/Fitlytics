@@ -1,39 +1,35 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Flame, Zap, TrendingUp, Trophy, ArrowUp, MoveVertical, Activity, Timer, Wind, Target, Smartphone } from "lucide-react"
+import { Flame, Zap, TrendingUp, Trophy, Target, Timer, Dumbbell, Smartphone } from "lucide-react"
 
-export function BeastModeSection() {
+interface BeastModeSectionProps {
+  connected: boolean
+  onEnterBeastMode: () => void
+}
+
+export function BeastModeSection({ connected, onEnterBeastMode }: BeastModeSectionProps) {
   const exercises = [
-    {
-      name: "Push-ups",
-      icon: ArrowUp,
-      description: "Upper body strength",
-    },
-    {
-      name: "Squats",
-      icon: MoveVertical,
-      description: "Lower body power",
-    },
-    {
-      name: "Sit-ups",
-      icon: Activity,
-      description: "Core strength",
-    },
-    {
-      name: "Planks",
-      icon: Timer,
-      description: "Core stability",
-    },
-    {
-      name: "Lunges",
-      icon: Wind,
-      description: "Leg endurance",
-    },
     {
       name: "Jumping Jacks",
       icon: Target,
-      description: "Cardio blast",
+      description: "Full body cardio",
+    },
+    {
+      name: "Shadow Boxing",
+      icon: Dumbbell,
+      description: "Explosive punches",
+    },
+    {
+      name: "Arm Raises",
+      icon: TrendingUp,
+      description: "Controlled elevation",
+    },
+    {
+      name: "Plank",
+      icon: Timer,
+      description: "Core stability",
     },
   ]
 
@@ -165,7 +161,7 @@ export function BeastModeSection() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 gap-4 sm:gap-6 max-w-3xl mx-auto">
             {exercises.map((exercise, index) => {
               const Icon = exercise.icon
               return (
@@ -271,16 +267,18 @@ export function BeastModeSection() {
               
               <Button
                 size="lg"
-                disabled
-                className="w-full sm:w-auto text-base sm:text-lg px-8 sm:px-12 py-6 sm:py-7 rounded-full bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 hover:from-red-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold shadow-lg shadow-red-600/30 opacity-50 cursor-not-allowed"
+                onClick={onEnterBeastMode}
+                className="w-full sm:w-auto text-base sm:text-lg px-8 sm:px-12 py-6 sm:py-7 rounded-full bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 hover:from-red-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold shadow-lg shadow-red-600/30 hover:scale-105 transition-transform duration-300"
               >
                 <Flame className="h-5 w-5 mr-2" />
                 Enter Beast Mode
               </Button>
               
-              <p className="text-xs text-muted-foreground">
-                Feature in development • Stay tuned for updates
-              </p>
+              {!connected && (
+                <p className="text-xs text-yellow-400">
+                  💡 Connect to Fitlytics first to start training
+                </p>
+              )}
             </div>
           </div>
         </div>

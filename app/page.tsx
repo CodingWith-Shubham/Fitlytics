@@ -7,6 +7,7 @@ import { SessionSummary } from "@/components/session-summary";
 import { WeightInputModal } from "@/components/weight-input-modal";
 import { SleepAnalysisSection } from "@/components/sleep-analysis-section";
 import { BeastModeSection } from "@/components/beast-mode-section";
+import { BeastModeTrainer } from "@/components/beast-mode-trainer";
 
 export default function Home() {
   const [activity, setActivity] = useState<string>("—");
@@ -32,6 +33,7 @@ export default function Home() {
   });
   const [calculatedCalories, setCalculatedCalories] = useState<number | null>(null);
   const [showWeightModal, setShowWeightModal] = useState(false);
+  const [showBeastMode, setShowBeastMode] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const lastActivityRef = useRef<string>("");
@@ -310,6 +312,19 @@ export default function Home() {
     setSensorData(null);
   };
 
+  const handleEnterBeastMode = () => {
+    if (!connected) {
+      // Show connection prompt
+      alert("Please connect to Fitlytics first to start Beast Mode training.");
+      return;
+    }
+    setShowBeastMode(true);
+  };
+
+  const handleCloseBeastMode = () => {
+    setShowBeastMode(false);
+  };
+
   return (
     <main className="min-h-screen">
       <div className="gradient-bg fixed inset-0 -z-10" />
@@ -359,8 +374,18 @@ export default function Home() {
           currentActivity={activity}
         />
         
-        <BeastModeSection />
+        <BeastModeSection 
+          connected={connected}
+          onEnterBeastMode={handleEnterBeastMode}
+        />
       </div>
+      
+      {showBeastMode && (
+        <BeastModeTrainer
+          sensorData={sensorData}
+          onClose={handleCloseBeastMode}
+        />
+      )}
     </main>
   );
 }
