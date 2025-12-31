@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log("Received data:", body);
 
-    // Forward to Python ML server
+    // Forward to Python ML server for fitness score prediction
     console.log("Calling Python server at http://127.0.0.1:8000/predict");
     const mlRes = await fetch("http://127.0.0.1:8000/predict", {
       method: "POST",

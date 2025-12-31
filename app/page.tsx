@@ -8,6 +8,8 @@ import { WeightInputModal } from "@/components/weight-input-modal";
 import { SleepAnalysisSection } from "@/components/sleep-analysis-section";
 import { BeastModeSection } from "@/components/beast-mode-section";
 import { BeastModeTrainer } from "@/components/beast-mode-trainer";
+import { FitnessScoreSection } from "@/components/fitness-score-section";
+import { FitnessPredictionModal } from "@/components/fitness-prediction-modal";
 
 export default function Home() {
   const [activity, setActivity] = useState<string>("—");
@@ -34,6 +36,7 @@ export default function Home() {
   const [calculatedCalories, setCalculatedCalories] = useState<number | null>(null);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showBeastMode, setShowBeastMode] = useState(false);
+  const [showFitnessPrediction, setShowFitnessPrediction] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const lastActivityRef = useRef<string>("");
@@ -325,6 +328,19 @@ export default function Home() {
     setShowBeastMode(false);
   };
 
+  const handleOpenFitnessPrediction = () => {
+    if (!connected) {
+      // Show connection prompt
+      alert("Please connect to Fitlytics first to predict your fitness score.");
+      return;
+    }
+    setShowFitnessPrediction(true);
+  };
+
+  const handleCloseFitnessPrediction = () => {
+    setShowFitnessPrediction(false);
+  };
+
   return (
     <main className="min-h-screen">
       <div className="gradient-bg fixed inset-0 -z-10" />
@@ -378,12 +394,25 @@ export default function Home() {
           connected={connected}
           onEnterBeastMode={handleEnterBeastMode}
         />
+        
+        <FitnessScoreSection 
+          connected={connected}
+          onPredict={handleOpenFitnessPrediction}
+        />
       </div>
       
       {showBeastMode && (
         <BeastModeTrainer
           sensorData={sensorData}
           onClose={handleCloseBeastMode}
+        />
+      )}
+      
+      {showFitnessPrediction && (
+        <FitnessPredictionModal
+          isOpen={showFitnessPrediction}
+          onClose={handleCloseFitnessPrediction}
+          connected={connected}
         />
       )}
     </main>
