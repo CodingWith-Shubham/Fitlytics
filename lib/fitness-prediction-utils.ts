@@ -177,13 +177,13 @@ export function interpretFitnessScore(score: number): {
   color: string
   message: string
 } {
-  if (score < 30) {
+  if (score < 40) {
     return {
       level: "Low",
       color: "from-red-600 to-red-700",
       message: "Keep pushing! There's room for improvement."
     }
-  } else if (score < 60) {
+  } else if (score < 80) {
     return {
       level: "Moderate",
       color: "from-yellow-600 to-orange-600",
