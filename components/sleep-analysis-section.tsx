@@ -9,9 +9,10 @@ import { SleepSummary } from "@/components/sleep-summary"
 interface SleepAnalysisSectionProps {
   connected: boolean
   currentActivity: string
+  onSleepModeChange: (sleepMode: boolean) => void
 }
 
-export function SleepAnalysisSection({ connected, currentActivity }: SleepAnalysisSectionProps) {
+export function SleepAnalysisSection({ connected, currentActivity, onSleepModeChange }: SleepAnalysisSectionProps) {
   const [sleepActive, setSleepActive] = useState(false)
   const [sleepElapsed, setSleepElapsed] = useState(0)
   const [showSleepSummary, setShowSleepSummary] = useState(false)
@@ -41,24 +42,41 @@ export function SleepAnalysisSection({ connected, currentActivity }: SleepAnalys
 
   // Track sleep phases based on current activity
   useEffect(() => {
-    if (!sleepActive || !currentActivity || currentActivity === "—") {
+    if (!sleepActive || !currentActivity || currentActivity === "—" || currentActivity === "Collecting data...") {
       return
     }
+
+    console.log(`👤 Sleep tracking: Current activity = ${currentActivity}`)
 
     const now = Date.now()
     
     if (!lastSleepActivityRef.current) {
       lastSleepActivityRef.current = currentActivity
       sleepActivityStartTimeRef.current = now
+      console.log(`🏁 Started tracking: ${currentActivity}`)
     } else if (lastSleepActivityRef.current !== currentActivity && sleepActivityStartTimeRef.current > 0) {
       const duration = (now - sleepActivityStartTimeRef.current) / 1000
       
+      console.log(`🔄 Activity changed from ${lastSleepActivityRef.current} to ${currentActivity}. Duration: ${duration.toFixed(2)}s`)
+      
       if (lastSleepActivityRef.current.toLowerCase().includes("idle")) {
-        setSleepPhases(prev => ({ ...prev, deepSleep: prev.deepSleep + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, deepSleep: prev.deepSleep + duration }
+          console.log(`👤 Deep Sleep: ${updated.deepSleep.toFixed(2)}s`)
+          return updated
+        })
       } else if (lastSleepActivityRef.current.toLowerCase().includes("walking")) {
-        setSleepPhases(prev => ({ ...prev, lightSleep: prev.lightSleep + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, lightSleep: prev.lightSleep + duration }
+          console.log(`💤 Light Sleep: ${updated.lightSleep.toFixed(2)}s`)
+          return updated
+        })
       } else if (lastSleepActivityRef.current.toLowerCase().includes("running")) {
-        setSleepPhases(prev => ({ ...prev, restless: prev.restless + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, restless: prev.restless + duration }
+          console.log(`⚡ Restless: ${updated.restless.toFixed(2)}s`)
+          return updated
+        })
       }
       
       lastSleepActivityRef.current = currentActivity
@@ -71,35 +89,64 @@ export function SleepAnalysisSection({ connected, currentActivity }: SleepAnalys
       return
     }
     
+    console.log("🌙 ============ STARTING SLEEP ANALYSIS ============")
     setSleepActive(true)
     setSleepElapsed(0)
     setSleepPhases({ deepSleep: 0, lightSleep: 0, restless: 0 })
     setShowSleepSummary(false)
     lastSleepActivityRef.current = ""
     sleepActivityStartTimeRef.current = 0
+    
+    // Enable sleep mode for more sensitive thresholds
+    onSleepModeChange(true)
+    console.log("🌙 Sleep mode ENABLED - Using sensitive thresholds")
+    console.log("📊 Waiting for activity detection...")
   }
 
   const handleStopSleepAnalysis = () => {
+    console.log("🛑 ============ STOPPING SLEEP ANALYSIS ============")
+    
     // Calculate final phase duration
     if (lastSleepActivityRef.current && sleepActivityStartTimeRef.current > 0) {
       const now = Date.now()
       const duration = (now - sleepActivityStartTimeRef.current) / 1000
       
+      console.log(`📊 Final activity: ${lastSleepActivityRef.current}, Duration: ${duration.toFixed(2)}s`)
+      
       if (lastSleepActivityRef.current.toLowerCase().includes("idle")) {
-        setSleepPhases(prev => ({ ...prev, deepSleep: prev.deepSleep + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, deepSleep: prev.deepSleep + duration }
+          console.log(`👤 Final Deep Sleep: ${updated.deepSleep.toFixed(2)}s`)
+          return updated
+        })
       } else if (lastSleepActivityRef.current.toLowerCase().includes("walking")) {
-        setSleepPhases(prev => ({ ...prev, lightSleep: prev.lightSleep + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, lightSleep: prev.lightSleep + duration }
+          console.log(`💤 Final Light Sleep: ${updated.lightSleep.toFixed(2)}s`)
+          return updated
+        })
       } else if (lastSleepActivityRef.current.toLowerCase().includes("running")) {
-        setSleepPhases(prev => ({ ...prev, restless: prev.restless + duration }))
+        setSleepPhases(prev => {
+          const updated = { ...prev, restless: prev.restless + duration }
+          console.log(`⚡ Final Restless: ${updated.restless.toFixed(2)}s`)
+          return updated
+        })
       }
+    } else {
+      console.warn("⚠️ No activity was tracked during sleep session!")
     }
     
     setSleepActive(false)
     setShowSleepSummary(true)
+    
+    // Disable sleep mode
+    onSleepModeChange(false)
+    console.log("☀️ Sleep mode DISABLED - Using standard thresholds")
   }
 
   const handleCloseSleepSummary = () => {
     setShowSleepSummary(false)
+    onSleepModeChange(false)
   }
 
   const features = [

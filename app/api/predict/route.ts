@@ -6,8 +6,8 @@ export async function POST(req: Request) {
     console.log("Received data:", body);
 
     // Forward to Python ML server for fitness score prediction
-    console.log("Calling Python server at http://127.0.0.1:8000/predict");
-    const mlRes = await fetch("http://127.0.0.1:8000/predict", {
+    console.log("Calling Python server at https://fitlytics-ai.onrender.com/predict");
+    const mlRes = await fetch("https://fitlytics-ai.onrender.com/predict", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

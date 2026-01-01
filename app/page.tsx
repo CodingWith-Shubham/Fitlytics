@@ -37,14 +37,20 @@ export default function Home() {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showBeastMode, setShowBeastMode] = useState(false);
   const [showFitnessPrediction, setShowFitnessPrediction] = useState(false);
+  const [sleepMode, setSleepMode] = useState(false);
   
-  const wsRef = useRef<WebSocket | null>(null);
+  const bleDeviceRef = useRef<BluetoothDevice | null>(null);
+  const bleCharacteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const lastActivityRef = useRef<string>("");
   const activityStartTimeRef = useRef<number>(0);
   
   // Sliding window buffer for 2-second analysis
   const sensorBuffer = useRef<Array<{ timestamp: number; data: any }>>([]);
   const WINDOW_SIZE_MS = 2000; // 2 seconds
+  
+  // BLE UUIDs
+  const BLE_SERVICE_UUID = "12345678-1234-1234-1234-1234567890ab";
+  const BLE_CHARACTERISTIC_UUID = "abcd1234-5678-1234-5678-abcdef123456";
 
   // Session elapsed timer
   useEffect(() => {
@@ -61,12 +67,18 @@ export default function Home() {
     };
   }, [sessionActive]);
 
-  // ESP32 WebSocket Connection - Managed by handleConnect function
-  // No auto-connection on mount
+  // Cleanup BLE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (bleDeviceRef.current?.gatt?.connected) {
+        bleDeviceRef.current.gatt.disconnect();
+      }
+    };
+  }, []);
 
   // Auto-predict every 5 seconds
   useEffect(() => {
-    if (!autoPredictEnabled || !connected || !sensorData || !sessionActive) {
+    if (!autoPredictEnabled || !connected || !sensorData || (!sessionActive && !sleepMode)) {
       return;
     }
 
@@ -78,7 +90,7 @@ export default function Home() {
     predict();
 
     return () => clearInterval(interval);
-  }, [autoPredictEnabled, connected, sensorData, sessionActive]);
+  }, [autoPredictEnabled, connected, sensorData, sessionActive, sleepMode]);
 
   function classifyActivity(): string {
     // Need sufficient samples in the window (minimum 10 samples for reliable classification)
@@ -97,20 +109,34 @@ export default function Home() {
     const maxGyroMag = Math.max(...gyroMagnitudes);
     const minGyroMag = Math.min(...gyroMagnitudes);
     
-    // Rule-based classification using windowed gyro_mag (HIGHEST DIFFERENTIATING FACTOR)
-    // Thresholds based on statistical analysis of recorded sensor data
-    // Idle: ~2500, Walking: ~8332, Running: ~25196
-    const IDLE_THRESHOLD = 5500;      // Idle avg: 2500, Walking avg: 8332
-    const WALKING_THRESHOLD = 16000;  // Walking avg: 8332, Running avg: 25196
+    // Use different thresholds for sleep mode (much more sensitive to movement)
+    let IDLE_THRESHOLD, WALKING_THRESHOLD;
     
-    // console.log(`Window [${sensorBuffer.current.length} samples]: AvgGyro=${avgGyroMag.toFixed(2)}, Max=${maxGyroMag.toFixed(2)}, Min=${minGyroMag.toFixed(2)}`);
+    if (sleepMode) {
+      // Sleep mode: VERY sensitive thresholds
+      // Deep Sleep (still) < 1000
+      // Light Sleep (tiny movements) 1000-3000  
+      // Restless (any significant movement) > 3000
+      IDLE_THRESHOLD = 1000;
+      WALKING_THRESHOLD = 3000;
+      console.log(`😴 SLEEP MODE - AvgGyro: ${avgGyroMag.toFixed(2)}, Max: ${maxGyroMag.toFixed(2)}`);
+    } else {
+      // Activity mode: Standard thresholds
+      // Idle: ~2500, Walking: ~8332, Running: ~25196
+      IDLE_THRESHOLD = 5500;
+      WALKING_THRESHOLD = 16000;
+      console.log(`🏃 ACTIVITY MODE - AvgGyro: ${avgGyroMag.toFixed(2)}, Max: ${maxGyroMag.toFixed(2)}`);
+    }
     
     // Use average for stable classification
     if (avgGyroMag < IDLE_THRESHOLD) {
+      console.log(`✅ Classified as: Idle (avgGyro: ${avgGyroMag.toFixed(2)} < ${IDLE_THRESHOLD})`);
       return "Idle";
     } else if (avgGyroMag < WALKING_THRESHOLD) {
+      console.log(`✅ Classified as: Walking (avgGyro: ${avgGyroMag.toFixed(2)} < ${WALKING_THRESHOLD})`);
       return "Walking";
     } else {
+      console.log(`✅ Classified as: Running (avgGyro: ${avgGyroMag.toFixed(2)} >= ${WALKING_THRESHOLD})`);
       return "Running";
     }
   }
@@ -175,78 +201,128 @@ export default function Home() {
     }
   }
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     setConnecting(true);
     setConnectionError(null);
     
-    // Connect to ESP32 WebSocket
-    const ws = new WebSocket("ws://192.168.31.95:81");
-    
-    ws.onopen = () => {
-      console.log("✅ Connected to ESP32");
+    try {
+      // Check if Web Bluetooth is supported
+      if (!navigator.bluetooth) {
+        throw new Error("Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.");
+      }
+
+      console.log("🔍 Requesting Bluetooth device...");
+      
+      // Request Bluetooth device with Fitlytics-BLE service
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [
+          { name: "Fitlytics-BLE" }
+        ],
+        optionalServices: [BLE_SERVICE_UUID]
+      });
+      
+      console.log("📱 Device selected:", device.name);
+      bleDeviceRef.current = device;
+      
+      // Listen for disconnect events
+      device.addEventListener('gattserverdisconnected', handleBleDisconnect);
+      
+      // Connect to GATT server
+      console.log("🔗 Connecting to GATT server...");
+      const server = await device.gatt!.connect();
+      
+      // Get the service
+      console.log("🔍 Getting service...");
+      const service = await server.getPrimaryService(BLE_SERVICE_UUID);
+      
+      // Get the characteristic
+      console.log("🔍 Getting characteristic...");
+      const characteristic = await service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
+      bleCharacteristicRef.current = characteristic;
+      
+      // Subscribe to notifications
+      console.log("📡 Starting notifications...");
+      await characteristic.startNotifications();
+      
+      // Handle incoming data
+      characteristic.addEventListener('characteristicvaluechanged', handleBleData);
+      
+      console.log("✅ Connected to Fitlytics-BLE");
       setConnected(true);
       setConnecting(false);
       setConnectionError(null);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        // Parse CSV format: timestamp,ax,ay,az,gx,gy,gz,temp
-        const values = event.data.split(",");
-        if (values.length >= 8) {
-          const data = {
-            ax: parseFloat(values[1]),
-            ay: parseFloat(values[2]),
-            az: parseFloat(values[3]),
-            gx: parseFloat(values[4]),
-            gy: parseFloat(values[5]),
-            gz: parseFloat(values[6]),
-            temp: parseFloat(values[7])
-          };
-          
-          // Add to sliding window buffer with timestamp
-          const now = Date.now();
-          sensorBuffer.current.push({ timestamp: now, data });
-          
-          // Remove old samples outside 2-second window
-          sensorBuffer.current = sensorBuffer.current.filter(
-            sample => now - sample.timestamp <= WINDOW_SIZE_MS
-          );
-          
-          // console.log(`Buffer size: ${sensorBuffer.current.length} samples`);
-          setSensorData(data);
-        }
-      } catch (e) {
-        console.error("Failed to parse sensor data:", e);
+      
+    } catch (error: any) {
+      console.error("❌ BLE connection error:", error);
+      let errorMessage = "Failed to connect to Fitlytics-BLE. ";
+      
+      if (error.name === 'NotFoundError') {
+        errorMessage += "Device not found. Please ensure ESP32 is powered on and advertising.";
+      } else if (error.name === 'SecurityError') {
+        errorMessage += "Bluetooth access denied. Please allow Bluetooth permissions.";
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage += "Web Bluetooth is not supported in this browser.";
+      } else {
+        errorMessage += error.message || "Unknown error occurred.";
       }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      setConnectionError("Failed to connect to ESP32. Please check if the device is powered on and accessible.");
+      
+      setConnectionError(errorMessage);
       setConnecting(false);
       setConnected(false);
-    };
+    }
+  };
 
-    ws.onclose = () => {
-      console.log("❌ Disconnected from ESP32");
-      if (connected) {
-        setConnectionError("Connection lost to ESP32");
-      }
-      setConnected(false);
-      setSessionActive(false);
-    };
-
-    wsRef.current = ws;
+  const handleBleData = (event: Event) => {
+    const target = event.target as BluetoothRemoteGATTCharacteristic;
+    const value = target.value;
     
-    // Timeout for connection attempt
-    setTimeout(() => {
-      if (connecting && !connected) {
-        ws.close();
-        setConnecting(false);
-        setConnectionError("Connection timeout. Please check ESP32 IP address and network.");
+    if (!value) return;
+    
+    try {
+      // Decode the CSV string from the characteristic value
+      const decoder = new TextDecoder('utf-8');
+      const csvString = decoder.decode(value);
+      
+      // Parse CSV format: timestamp,ax,ay,az,gx,gy,gz,temp
+      const values = csvString.split(",");
+      if (values.length >= 8) {
+        const data = {
+          ax: parseFloat(values[1]),
+          ay: parseFloat(values[2]),
+          az: parseFloat(values[3]),
+          gx: parseFloat(values[4]),
+          gy: parseFloat(values[5]),
+          gz: parseFloat(values[6]),
+          temp: parseFloat(values[7])
+        };
+        
+        // Add to sliding window buffer with timestamp
+        const now = Date.now();
+        sensorBuffer.current.push({ timestamp: now, data });
+        
+        // Remove old samples outside 2-second window
+        sensorBuffer.current = sensorBuffer.current.filter(
+          sample => now - sample.timestamp <= WINDOW_SIZE_MS
+        );
+        
+        setSensorData(data);
+        
+        // Log gyro magnitude for debugging
+        const gyroMag = Math.sqrt(data.gx * data.gx + data.gy * data.gy + data.gz * data.gz);
+        console.log(`📡 BLE Data - Gyro: [${data.gx}, ${data.gy}, ${data.gz}] | Magnitude: ${gyroMag.toFixed(2)}`);
       }
-    }, 10000); // 10 second timeout
+    } catch (e) {
+      console.error("Failed to parse BLE sensor data:", e);
+    }
+  };
+
+  const handleBleDisconnect = () => {
+    console.log("❌ Disconnected from Fitlytics-BLE");
+    if (connected) {
+      setConnectionError("Connection lost to Fitlytics-BLE");
+    }
+    setConnected(false);
+    setSessionActive(false);
   };
 
   const handleStartSession = () => {
@@ -306,9 +382,22 @@ export default function Home() {
 
   const handleDisconnect = () => {
     setSessionActive(false);
-    if (wsRef.current) {
-      wsRef.current.close();
+    
+    // Stop BLE notifications and disconnect
+    if (bleCharacteristicRef.current) {
+      bleCharacteristicRef.current.stopNotifications().catch(err => {
+        console.error("Error stopping notifications:", err);
+      });
+      bleCharacteristicRef.current.removeEventListener('characteristicvaluechanged', handleBleData);
+      bleCharacteristicRef.current = null;
     }
+    
+    if (bleDeviceRef.current?.gatt?.connected) {
+      bleDeviceRef.current.removeEventListener('gattserverdisconnected', handleBleDisconnect);
+      bleDeviceRef.current.gatt.disconnect();
+      bleDeviceRef.current = null;
+    }
+    
     setConnected(false);
     setConnectionError(null);
     sensorBuffer.current = [];
@@ -388,6 +477,7 @@ export default function Home() {
         <SleepAnalysisSection 
           connected={connected}
           currentActivity={activity}
+          onSleepModeChange={setSleepMode}
         />
         
         <BeastModeSection 

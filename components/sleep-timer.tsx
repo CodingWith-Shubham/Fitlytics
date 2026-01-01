@@ -48,7 +48,7 @@ export function SleepTimer({ active, seconds, currentActivity, onStop }: SleepTi
         </div>
       </div>
 
-      {currentActivity && currentActivity !== "—" && (
+      {currentActivity && currentActivity !== "—" && currentActivity !== "Collecting data..." && (
         <div className="text-center">
           <div className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wider mb-2 sm:mb-3">
             Current State
@@ -58,6 +58,20 @@ export function SleepTimer({ active, seconds, currentActivity, onStop }: SleepTi
           </div>
           <div className="text-xs sm:text-sm text-muted-foreground mt-2">
             Based on movement patterns
+          </div>
+        </div>
+      )}
+      
+      {(!currentActivity || currentActivity === "—" || currentActivity === "Collecting data...") && (
+        <div className="text-center">
+          <div className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wider mb-2 sm:mb-3">
+            Current State
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-muted-foreground animate-pulse">
+            Collecting data...
+          </div>
+          <div className="text-xs sm:text-sm text-muted-foreground mt-2">
+            Building sensor buffer...
           </div>
         </div>
       )}
