@@ -10,6 +10,7 @@ import { BeastModeSection } from "@/components/beast-mode-section";
 import { BeastModeTrainer } from "@/components/beast-mode-trainer";
 import { FitnessScoreSection } from "@/components/fitness-score-section";
 import { FitnessPredictionModal } from "@/components/fitness-prediction-modal";
+import { Footer } from "@/components/footer";
 
 export default function Home() {
   const [activity, setActivity] = useState<string>("—");
@@ -119,24 +120,19 @@ export default function Home() {
       // Restless (any significant movement) > 3000
       IDLE_THRESHOLD = 1000;
       WALKING_THRESHOLD = 3000;
-      console.log(`😴 SLEEP MODE - AvgGyro: ${avgGyroMag.toFixed(2)}, Max: ${maxGyroMag.toFixed(2)}`);
     } else {
       // Activity mode: Standard thresholds
       // Idle: ~2500, Walking: ~8332, Running: ~25196
       IDLE_THRESHOLD = 5500;
       WALKING_THRESHOLD = 16000;
-      console.log(`🏃 ACTIVITY MODE - AvgGyro: ${avgGyroMag.toFixed(2)}, Max: ${maxGyroMag.toFixed(2)}`);
     }
     
     // Use average for stable classification
     if (avgGyroMag < IDLE_THRESHOLD) {
-      console.log(`✅ Classified as: Idle (avgGyro: ${avgGyroMag.toFixed(2)} < ${IDLE_THRESHOLD})`);
       return "Idle";
     } else if (avgGyroMag < WALKING_THRESHOLD) {
-      console.log(`✅ Classified as: Walking (avgGyro: ${avgGyroMag.toFixed(2)} < ${WALKING_THRESHOLD})`);
       return "Walking";
     } else {
-      console.log(`✅ Classified as: Running (avgGyro: ${avgGyroMag.toFixed(2)} >= ${WALKING_THRESHOLD})`);
       return "Running";
     }
   }
@@ -210,8 +206,6 @@ export default function Home() {
       if (!navigator.bluetooth) {
         throw new Error("Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.");
       }
-
-      console.log("🔍 Requesting Bluetooth device...");
       
       // Request Bluetooth device with Fitlytics-BLE service
       const device = await navigator.bluetooth.requestDevice({
@@ -221,33 +215,26 @@ export default function Home() {
         optionalServices: [BLE_SERVICE_UUID]
       });
       
-      console.log("📱 Device selected:", device.name);
       bleDeviceRef.current = device;
       
       // Listen for disconnect events
       device.addEventListener('gattserverdisconnected', handleBleDisconnect);
       
       // Connect to GATT server
-      console.log("🔗 Connecting to GATT server...");
       const server = await device.gatt!.connect();
       
       // Get the service
-      console.log("🔍 Getting service...");
       const service = await server.getPrimaryService(BLE_SERVICE_UUID);
       
       // Get the characteristic
-      console.log("🔍 Getting characteristic...");
       const characteristic = await service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
       bleCharacteristicRef.current = characteristic;
       
       // Subscribe to notifications
-      console.log("📡 Starting notifications...");
       await characteristic.startNotifications();
       
       // Handle incoming data
       characteristic.addEventListener('characteristicvaluechanged', handleBleData);
-      
-      console.log("✅ Connected to Fitlytics-BLE");
       setConnected(true);
       setConnecting(false);
       setConnectionError(null);
@@ -306,10 +293,6 @@ export default function Home() {
         );
         
         setSensorData(data);
-        
-        // Log gyro magnitude for debugging
-        const gyroMag = Math.sqrt(data.gx * data.gx + data.gy * data.gy + data.gz * data.gz);
-        console.log(`📡 BLE Data - Gyro: [${data.gx}, ${data.gy}, ${data.gz}] | Magnitude: ${gyroMag.toFixed(2)}`);
       }
     } catch (e) {
       console.error("Failed to parse BLE sensor data:", e);
@@ -317,7 +300,6 @@ export default function Home() {
   };
 
   const handleBleDisconnect = () => {
-    console.log("❌ Disconnected from Fitlytics-BLE");
     if (connected) {
       setConnectionError("Connection lost to Fitlytics-BLE");
     }
@@ -505,6 +487,8 @@ export default function Home() {
           connected={connected}
         />
       )}
+      
+      <Footer />
     </main>
   );
 }

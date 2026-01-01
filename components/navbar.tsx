@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Activity, Menu, X } from "lucide-react"
 
 interface NavbarProps {
@@ -48,13 +49,16 @@ export function Navbar({ connected }: NavbarProps) {
             <a href="#dashboard" className="text-sm font-medium transition-colors hover:text-primary">
               Dashboard
             </a>
-            <a href="#analytics" className="text-sm font-medium transition-colors hover:text-primary">
-              Analytics
+            <a href="#sleep-analysis" className="text-sm font-medium transition-colors hover:text-primary">
+              Sleep
             </a>
             <a href="#beast-mode" className="text-sm font-medium transition-colors hover:text-primary">
               Beast Mode
             </a>
-            <a href="#about" className="text-sm font-medium transition-colors hover:text-primary">
+            <Link href="/documentation" className="text-sm font-medium transition-colors hover:text-primary">
+              Documentation
+            </Link>
+            <a href="/documentation" className="text-sm font-medium transition-colors hover:text-primary">
               About
             </a>
           </div>
@@ -111,11 +115,11 @@ export function Navbar({ connected }: NavbarProps) {
               Dashboard
             </a>
             <a
-              href="#analytics"
+              href="#sleep-analysis"
               onClick={closeMobileMenu}
               className="block px-4 py-2 text-base font-medium transition-colors hover:text-primary hover:bg-secondary/30 rounded-lg"
             >
-              Analytics
+              Sleep
             </a>
             <a
               href="#beast-mode"
@@ -124,6 +128,13 @@ export function Navbar({ connected }: NavbarProps) {
             >
               Beast Mode
             </a>
+            <Link
+              href="/documentation"
+              onClick={closeMobileMenu}
+              className="block px-4 py-2 text-base font-medium transition-colors hover:text-primary hover:bg-secondary/30 rounded-lg"
+            >
+              Documentation
+            </Link>
             <a
               href="#about"
               onClick={closeMobileMenu}
